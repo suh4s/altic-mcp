@@ -1,9 +1,7 @@
-import subprocess
 from datetime import datetime
 from typing import Tuple
 
 from . import applescript, result
-from .constants import SCRIPTS_PREFIX
 
 VALID_RECURRENCE_FREQUENCIES = {"daily", "weekly", "monthly", "yearly"}
 
@@ -31,67 +29,35 @@ def validate_date_format(date_str: str) -> Tuple[bool, str]:
 
 
 def create_calendar_event(
-    title: str, start_datetime: str, duration_minutes: int, calendar_name: str = ""
+    title: str,
+    start_datetime: str,
+    duration_minutes: int,
+    calendar_name: str = "",
+    location: str = "",
+    notes: str = "",
 ) -> str:
-    script_path = SCRIPTS_PREFIX / "create-calendar-event.applescript"
-
+    if not title or not title.strip():
+        return result.error("calendar.create", "title cannot be empty", code="validation_error")
     is_valid, error_msg = validate_datetime_format(start_datetime)
     if not is_valid:
-        return f"Error: {error_msg}"
-
+        return result.error("calendar.create", error_msg, code="validation_error")
     if duration_minutes <= 0:
-        return "Error: Duration must be greater than 0 minutes"
-
-    try:
-        args = ["osascript", script_path, title, start_datetime, str(duration_minutes)]
-        if calendar_name:
-            args.append(calendar_name)
-
-        result = subprocess.run(
-            args,
-            capture_output=True,
-            text=True,
-            timeout=300,
+        return result.error(
+            "calendar.create",
+            "Duration must be greater than 0 minutes",
+            code="validation_error",
         )
-
-        if result.returncode != 0:
-            return f"Error: Unable to create calendar event: {result.stderr}"
-
-        return "Successfully created calendar event"
-    except Exception as e:
-        return f"Error: Failed to create calendar event: {str(e)}"
+    return _run_manager(
+        "create", title.strip(), start_datetime, str(duration_minutes), calendar_name, location, notes
+    )
 
 
 def list_calendar_events_for_day(date: str) -> str:
-    """
-    List all calendar events for a specific day.
-
-    Args:
-        date: Date in format 'YYYY-MM-DD'
-
-    Returns:
-        List of events or error message
-    """
-    script_path = SCRIPTS_PREFIX / "list-all-calendar-events-for-day.applescript"
-
+    """List all calendar events for a specific day ('YYYY-MM-DD') across all calendars."""
     is_valid, error_msg = validate_date_format(date)
     if not is_valid:
-        return f"Error: {error_msg}"
-
-    try:
-        result = subprocess.run(
-            ["osascript", script_path, date],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if result.returncode != 0:
-            return f"Error: Unable to list calendar events: {result.stderr}"
-
-        return result.stdout.strip()
-    except Exception as e:
-        return f"Error: Failed to list calendar events: {str(e)}"
+        return result.error("calendar.list", error_msg, code="validation_error")
+    return _run_manager("list", date, date, "")
 
 
 def _bool_arg(value: bool) -> str:
@@ -104,7 +70,7 @@ def _parse_date(date: str) -> datetime:
 
 def _run_manager(action: str, *args: str, timeout: int | None = None) -> str:
     return applescript.run_manager(
-        "calendar-manager.applescript",
+        "calendar-manager.swift",
         "calendar",
         action,
         *args,

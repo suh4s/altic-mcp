@@ -719,17 +719,71 @@ async def read_recent_messages(
 @mcp.tool()
 async def set_reminder(name: str, datetime: str, list_name: str = "Reminders") -> str:
     """
-    Set a reminder
+    Set a reminder (alias of create_reminder with a required time)
 
     Args:
         name: The reminder text
-        datetime: The time to set the reminder for, must in the following format "YYYY-MM-DD HH:MM"
+        datetime: "YYYY-MM-DD HH:MM" (timed, with alert) or "YYYY-MM-DD" (all-day)
         list_name: Reminder list, e.g. Work, Personal etc. Defaults to "Reminders"
 
     Returns:
-        A success or error message
+        The created reminder or an error
     """
     return reminders.set_reminder(name, datetime, list_name)
+
+
+@mcp.tool()
+async def create_reminder(
+    name: str,
+    datetime: str = "",
+    list_name: str = "",
+    body: str = "",
+    priority: int | None = None,
+) -> str:
+    """
+    Create a reminder. Everything except name is optional.
+
+    Args:
+        name: The reminder text
+        datetime: Optional "YYYY-MM-DD HH:MM" (timed, with alert) or "YYYY-MM-DD" (all-day)
+        list_name: Existing list to add it to; empty uses the default list
+        body: Optional notes
+        priority: Optional 0-9 (0 none, 1 high, 5 medium, 9 low)
+
+    Returns:
+        The created reminder or an error
+    """
+    return reminders.create_reminder(name, datetime, list_name, body, priority)
+
+
+@mcp.tool()
+async def create_reminder_list(name: str) -> str:
+    """
+    Create a Reminders list. Succeeds with created=false if it already exists.
+
+    Args:
+        name: The list name
+
+    Returns:
+        The list name and whether it was created
+    """
+    return reminders.create_reminder_list(name)
+
+
+@mcp.tool()
+async def move_reminder(identifier: str, to_list: str, list_name: str = "") -> str:
+    """
+    Move a reminder to another existing list.
+
+    Args:
+        identifier: Reminder id or exact title
+        to_list: Destination list name
+        list_name: Optional list to search in
+
+    Returns:
+        The moved reminder or an error
+    """
+    return reminders.move_reminder(identifier, to_list, list_name)
 
 
 @mcp.tool()

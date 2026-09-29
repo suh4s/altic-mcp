@@ -74,3 +74,27 @@ def test_run_manager_custom_timeout(monkeypatch):
 
     applescript.run_manager("x.applescript", "x", "act", timeout=120)
     assert seen["kwargs"]["timeout"] == 120
+
+
+def test_run_manager_compiles_and_runs_swift_helper(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout='{"lists":[]}', stderr=""
+        )
+
+    monkeypatch.setattr(applescript, "BIN_CACHE", tmp_path)
+    monkeypatch.setattr(applescript.subprocess, "run", fake_run)
+
+    first = json.loads(applescript.run_manager("reminders-manager.swift", "reminders", "list_lists"))
+    assert first["ok"] is True
+    assert calls[0][0] == "swiftc"  # no cached binary yet -> compile
+    assert Path(calls[1][0]) == tmp_path / "reminders-manager"
+    assert calls[1][1:] == ["list_lists"]
+
+    (tmp_path / "reminders-manager").touch()  # cached and newer than source -> no recompile
+    calls.clear()
+    applescript.run_manager("reminders-manager.swift", "reminders", "list_lists")
+    assert [Path(c[0]).name for c in calls] == ["reminders-manager"]

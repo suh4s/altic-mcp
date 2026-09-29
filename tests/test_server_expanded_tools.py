@@ -30,6 +30,9 @@ def test_server_exposes_expanded_calendar_reminders_and_notes_tools():
         "create_contact",
         "update_contact",
         "update_reminder",
+        "create_reminder",
+        "create_reminder_list",
+        "move_reminder",
         "show_reminder",
     }.issubset(tool_names)
 
