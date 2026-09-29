@@ -12,7 +12,6 @@ from pathlib import Path
 from . import config, result
 from .constants import SCRIPTS_PREFIX
 
-
 BIN_CACHE = Path.home() / ".cache" / "altic-mcp"
 
 

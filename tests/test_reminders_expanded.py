@@ -24,7 +24,7 @@ def test_list_reminder_lists_invokes_manager(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr(reminders.subprocess, "run", fake_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
 
     payload = read_json(reminders.list_reminder_lists())
 
@@ -47,7 +47,7 @@ def test_list_reminders_serializes_filters(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr(reminders.subprocess, "run", fake_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
 
     payload = read_json(reminders.list_reminders("Work", include_completed=True))
 
@@ -59,7 +59,7 @@ def test_complete_reminder_rejects_empty_identifier(monkeypatch):
     def fail_run(*args, **kwargs):
         raise AssertionError("subprocess should not run")
 
-    monkeypatch.setattr(reminders.subprocess, "run", fail_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fail_run)
 
     payload = json.loads(reminders.complete_reminder(""))
 
@@ -79,7 +79,7 @@ def test_delete_reminder_defaults_to_dry_run(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr(reminders.subprocess, "run", fake_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
 
     payload = read_json(reminders.delete_reminder("Pay rent"))
 
@@ -92,7 +92,7 @@ def test_reschedule_reminder_validates_datetime(monkeypatch):
     def fail_run(*args, **kwargs):
         raise AssertionError("subprocess should not run")
 
-    monkeypatch.setattr(reminders.subprocess, "run", fail_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fail_run)
 
     payload = json.loads(reminders.reschedule_reminder("Pay rent", "tomorrow"))
 
@@ -112,7 +112,7 @@ def test_update_reminder_serializes_fields(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr(reminders.subprocess, "run", fake_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
 
     payload = read_json(
         reminders.update_reminder(
@@ -146,7 +146,7 @@ def test_update_reminder_validates_priority(monkeypatch):
     def fail_run(*args, **kwargs):
         raise AssertionError("subprocess should not run")
 
-    monkeypatch.setattr(reminders.subprocess, "run", fail_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fail_run)
 
     payload = json.loads(reminders.update_reminder("Pay rent", priority=12))
 
@@ -166,10 +166,43 @@ def test_show_reminder_invokes_manager(monkeypatch):
             stderr="",
         )
 
-    monkeypatch.setattr(reminders.subprocess, "run", fake_run)
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
 
     payload = read_json(reminders.show_reminder("Pay rent", "Home"))
 
     assert payload["action"] == "reminders.show"
     assert payload["data"]["shown"] is True
     assert seen["args"][1:] == ["show", "Pay rent", "Home"]
+
+
+def test_create_reminder_passes_optional_fields(monkeypatch):
+    seen = {}
+
+    def fake_run(args, **kwargs):
+        seen["args"] = args
+        return subprocess.CompletedProcess(
+            args=args, returncode=0, stdout='{"created":true,"reminder":{}}', stderr=""
+        )
+
+    monkeypatch.setattr(reminders.applescript.subprocess, "run", fake_run)
+
+    payload = read_json(reminders.create_reminder("Pay rent", "2026-10-01", "Home", "note", 5))
+
+    assert payload["action"] == "reminders.create"
+    assert seen["args"][1:] == ["create", "Pay rent", "2026-10-01", "Home", "note", "5"]
+
+
+def test_create_and_move_validate_input(monkeypatch):
+    monkeypatch.setattr(
+        reminders.applescript.subprocess,
+        "run",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("must not run")),
+    )
+    for out in (
+        reminders.create_reminder(" "),
+        reminders.create_reminder("x", "tomorrow"),
+        reminders.create_reminder("x", priority=10),
+        reminders.create_reminder_list(""),
+        reminders.move_reminder("x", ""),
+    ):
+        assert json.loads(out)["ok"] is False

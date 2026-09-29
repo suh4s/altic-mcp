@@ -1,46 +1,23 @@
-import subprocess
-from datetime import datetime
+from datetime import datetime as _datetime
 
 from . import applescript, result
-from .constants import SCRIPTS_PREFIX
 
 
 def validate_time_format(time: str) -> tuple[bool, str]:
     """
-    Validate that time is in the format 'YYYY-MM-DD HH:MM'.
+    Validate that time is 'YYYY-MM-DD HH:MM' (timed) or 'YYYY-MM-DD' (all-day).
     Returns (is_valid, error_message).
     """
-    try:
-        datetime.strptime(time, "%Y-%m-%d %H:%M")
-        return True, ""
-    except ValueError:
-        return (
-            False,
-            "Time must be in format 'YYYY-MM-DD HH:MM' (e.g., '2025-10-27 14:30')",
-        )
-
-
-def set_reminder(name: str, time: str, list_name: str) -> str:
-    script_path = SCRIPTS_PREFIX / "set-reminder.applescript"
-
-    is_valid, error_msg = validate_time_format(time)
-    if not is_valid:
-        return f"Error: {error_msg}"
-
-    try:
-        result = subprocess.run(
-            ["osascript", script_path, name, time, list_name],
-            capture_output=True,
-            text=True,
-            timeout=300,
-        )
-
-        if result.returncode != 0:
-            return f"Error: Unable to set reminder: {result.stderr}"
-
-        return "Successfully set reminder"
-    except Exception as e:
-        return f"Error: Failed to set reminder: {str(e)}"
+    for fmt in ("%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            _datetime.strptime(time, fmt)
+            return True, ""
+        except ValueError:
+            pass
+    return (
+        False,
+        "Time must be in format 'YYYY-MM-DD HH:MM' or 'YYYY-MM-DD' (e.g., '2025-10-27 14:30')",
+    )
 
 
 def _bool_arg(value: bool) -> str:
@@ -171,3 +148,44 @@ def show_reminder(identifier: str, list_name: str = "") -> str:
     if validation:
         return validation
     return _run_manager("show", identifier, list_name)
+
+
+def set_reminder(name: str, time: str, list_name: str = "") -> str:
+    return create_reminder(name, time, list_name)
+
+
+def create_reminder(
+    name: str,
+    datetime: str = "",
+    list_name: str = "",
+    body: str = "",
+    priority: int | None = None,
+) -> str:
+    if not name or not name.strip():
+        return result.error("reminders.create", "name cannot be empty", code="validation_error")
+    if datetime:
+        is_valid, error_msg = validate_time_format(datetime)
+        if not is_valid:
+            return result.error("reminders.create", error_msg, code="validation_error")
+    if priority is not None and not 0 <= priority <= 9:
+        return result.error(
+            "reminders.create", "priority must be between 0 and 9", code="validation_error"
+        )
+    return _run_manager(
+        "create", name, datetime, list_name, body, "" if priority is None else str(priority)
+    )
+
+
+def create_reminder_list(name: str) -> str:
+    if not name or not name.strip():
+        return result.error("reminders.create_list", "name cannot be empty", code="validation_error")
+    return _run_manager("create_list", name)
+
+
+def move_reminder(identifier: str, to_list: str, list_name: str = "") -> str:
+    validation = _validate_identifier("reminders.move", identifier)
+    if validation:
+        return validation
+    if not to_list or not to_list.strip():
+        return result.error("reminders.move", "to_list cannot be empty", code="validation_error")
+    return _run_manager("move", identifier, list_name, to_list)

@@ -75,16 +75,28 @@ func json(_ r: EKReminder) -> [String: Any] {
 }
 
 func parseDateTime(_ text: String) -> DateComponents {
+    let bad = "Date/time format must be 'YYYY-MM-DD HH:MM' or 'YYYY-MM-DD'"
     let parts = text.split(separator: " ")
-    guard parts.count == 2 else { fail("Date/time format must be 'YYYY-MM-DD HH:MM'") }
+    guard parts.count == 1 || parts.count == 2 else { fail(bad) }
     let d = parts[0].split(separator: "-").compactMap { Int($0) }
-    let t = parts[1].split(separator: ":").compactMap { Int($0) }
-    guard d.count == 3, t.count == 2 else { fail("Date/time format must be 'YYYY-MM-DD HH:MM'") }
+    guard d.count == 3 else { fail(bad) }
     var c = DateComponents()
     c.calendar = Calendar.current
     c.timeZone = TimeZone.current
-    c.year = d[0]; c.month = d[1]; c.day = d[2]; c.hour = t[0]; c.minute = t[1]
+    c.year = d[0]; c.month = d[1]; c.day = d[2]
+    if parts.count == 2 {
+        let t = parts[1].split(separator: ":").compactMap { Int($0) }
+        guard t.count == 2 else { fail(bad) }
+        c.hour = t[0]; c.minute = t[1]
+    }
     return c
+}
+
+// A timed due date also gets an alarm so Reminders notifies; date-only is all-day.
+func applyDue(_ r: EKReminder, _ c: DateComponents) {
+    r.dueDateComponents = c
+    r.alarms?.forEach { r.removeAlarm($0) }
+    if c.hour != nil, let date = c.calendar?.date(from: c) { r.addAlarm(EKAlarm(absoluteDate: date)) }
 }
 
 func findMatches(_ identifier: String, _ listName: String) -> [EKReminder] {
@@ -141,7 +153,7 @@ case "delete":
 case "reschedule":
     let due = parseDateTime(arg(2))
     let r = matchOne("rescheduled", arg(1), arg(3))
-    r.dueDateComponents = due
+    applyDue(r, due)
     save(r)
     emit(["rescheduled": true, "reminder": json(r)])
 
@@ -150,13 +162,52 @@ case "update":
     let r = matchOne("updated", arg(1), arg(2))
     if !arg(3).isEmpty { r.title = arg(3) }
     if !arg(4).isEmpty { r.notes = arg(4) }
-    if !arg(5).isEmpty { r.dueDateComponents = parseDateTime(arg(5)) }
+    if !arg(5).isEmpty { applyDue(r, parseDateTime(arg(5))) }
     if arg(6) == "true" { r.isCompleted = true }
     if arg(6) == "false" { r.isCompleted = false }
     if let p = Int(arg(7)) { r.priority = p }
     if !arg(8).isEmpty { fail("flagged is not supported by the EventKit backend") }
     save(r)
     emit(["updated": true, "reminder": json(r)])
+
+case "create":
+    // args: name datetime list body priority
+    let cal: EKCalendar
+    if arg(3).isEmpty {
+        guard let d = store.defaultCalendarForNewReminders() else { fail("No default Reminders list") }
+        cal = d
+    } else {
+        cal = targetCalendars(arg(3))[0]
+    }
+    let r = EKReminder(eventStore: store)
+    r.calendar = cal
+    r.title = arg(1)
+    if !arg(2).isEmpty { applyDue(r, parseDateTime(arg(2))) }
+    if !arg(4).isEmpty { r.notes = arg(4) }
+    if let p = Int(arg(5)) { r.priority = p }
+    save(r)
+    emit(["created": true, "reminder": json(r)])
+
+case "create_list":
+    let name = arg(1)
+    if name.isEmpty { fail("list name cannot be empty") }
+    if store.calendars(for: .reminder).contains(where: { $0.title == name }) {
+        emit(["created": false, "exists": true, "list": name])
+    }
+    let cal = EKCalendar(for: .reminder, eventStore: store)
+    cal.title = name
+    guard let source = store.defaultCalendarForNewReminders()?.source else { fail("No Reminders account available") }
+    cal.source = source
+    do { try store.saveCalendar(cal, commit: true) } catch { fail("Unable to create list: \(error.localizedDescription)") }
+    emit(["created": true, "exists": false, "list": name])
+
+case "move":
+    // args: id list to_list
+    let dest = targetCalendars(arg(3))[0]
+    let r = matchOne("moved", arg(1), arg(2))
+    r.calendar = dest
+    save(r)
+    emit(["moved": true, "reminder": json(r)])
 
 case "show":
     let r = matchOne("shown", arg(1), arg(2))
