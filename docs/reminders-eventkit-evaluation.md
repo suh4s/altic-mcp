@@ -111,8 +111,30 @@ dedicated completed predicate = 0, so `include_completed` returning the same 23 
   a failed compile surfaces as a generic error string.
 - Name-based lookups (`identifier` = title) fail with `match_count != 1` on duplicates, as before.
 
+## Follow-up: Calendar on EventKit
+
+Same root cause, same fix (`calendar-manager.swift`). Measured before/after through the MCP server:
+
+| Operation | AppleScript | EventKit |
+|---|---|---|
+| `list_calendar_events_for_day` (all calendars) | 127 s | 118 ms |
+| Panchanga (large subscribed calendar) `list` | timed out at 60 s | 125 ms |
+| `check_calendar_availability` | timed out at 60 s | 113 ms |
+| `list` 2-week range, all calendars | not measured | 137 ms |
+| `search` 2 years, all calendars | not measured | 386 ms |
+| `list_calendars` | 735 ms | ~0.1 s (first cold launch ~4 s) |
+
+Notes and the simple Notes tools were already fast (0.4-2 s) and were left alone.
+
+Verified live on a scratch calendar: create, availability conflict, update, dry-run delete, real delete,
+create_recurring (3 occurrences expanded), series delete; 0 leftovers.
+
+Behavior changes: recurring events are expanded into occurrences (AppleScript listed only stored
+starts); events gain `all_day` and `recurring`; availability ignores all-day events; update keeps the
+event length when only the start changes; update/delete on a recurring event apply to this and future
+occurrences; `list_calendar_events_for_day` returns the structured `list` result instead of text;
+`create_calendar_event` gained optional location/notes and returns the created event.
+
 ## Follow-ups
 
-- Add a Swift `create` action so `set_reminder` supports lists/all-day/notes without AppleScript.
-- Apply the same fix to `notes` and `calendar` managers if they show the same scaling
-  (Panchanga calendar queries also timed out at 60 s).
+- Notes stays on AppleScript; revisit only if it shows scaling problems on a large notes library.
