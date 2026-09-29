@@ -7,9 +7,28 @@ implementation that reads its default timeout from the runtime config.
 
 import json
 import subprocess
+from pathlib import Path
 
 from . import config, result
 from .constants import SCRIPTS_PREFIX
+
+
+BIN_CACHE = Path.home() / ".cache" / "altic-mcp"
+
+
+def _swift_binary(source: Path) -> Path:
+    """Compile a Swift helper once and reuse it; rebuild when the source is newer."""
+    binary = BIN_CACHE / source.stem
+    if not binary.exists() or binary.stat().st_mtime < source.stat().st_mtime:
+        BIN_CACHE.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["swiftc", "-O", str(source), "-o", str(binary)],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=180,
+        )
+    return binary
 
 
 def run_manager(
@@ -42,8 +61,12 @@ def run_manager(
         timeout = config.get("osascript_timeout_seconds")
 
     try:
+        if script_path.suffix == ".swift":
+            command = [str(_swift_binary(script_path)), action, *args]
+        else:
+            command = ["osascript", str(script_path), action, *args]
         completed = subprocess.run(
-            ["osascript", str(script_path), action, *args],
+            command,
             capture_output=True,
             text=True,
             timeout=timeout,

@@ -49,7 +49,7 @@ def _bool_arg(value: bool) -> str:
 
 def _run_manager(action: str, *args: str, timeout: int | None = None) -> str:
     return applescript.run_manager(
-        "reminders-manager.applescript",
+        "reminders-manager.swift",
         "reminders",
         action,
         *args,

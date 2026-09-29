@@ -30,9 +30,8 @@ def test_list_reminder_lists_invokes_manager(monkeypatch):
 
     assert payload["action"] == "reminders.list_lists"
     assert payload["data"] == {"lists": ["Reminders", "Work"]}
-    assert seen["args"][0] == "osascript"
-    assert Path(seen["args"][1]).name == "reminders-manager.applescript"
-    assert seen["args"][2:] == ["list_lists"]
+    assert Path(seen["args"][0]).name == "reminders-manager"
+    assert seen["args"][1:] == ["list_lists"]
     assert seen["kwargs"]["timeout"] == 60
 
 
@@ -53,7 +52,7 @@ def test_list_reminders_serializes_filters(monkeypatch):
     payload = read_json(reminders.list_reminders("Work", include_completed=True))
 
     assert payload["action"] == "reminders.list"
-    assert seen["args"][2:] == ["list", "Work", "true"]
+    assert seen["args"][1:] == ["list", "Work", "true"]
 
 
 def test_complete_reminder_rejects_empty_identifier(monkeypatch):
@@ -86,7 +85,7 @@ def test_delete_reminder_defaults_to_dry_run(monkeypatch):
 
     assert payload["action"] == "reminders.delete"
     assert payload["data"]["deleted"] is False
-    assert seen["args"][2:] == ["delete", "Pay rent", "", "true"]
+    assert seen["args"][1:] == ["delete", "Pay rent", "", "true"]
 
 
 def test_reschedule_reminder_validates_datetime(monkeypatch):
@@ -130,7 +129,7 @@ def test_update_reminder_serializes_fields(monkeypatch):
 
     assert payload["action"] == "reminders.update"
     assert payload["data"]["updated"] is True
-    assert seen["args"][2:] == [
+    assert seen["args"][1:] == [
         "update",
         "Pay rent",
         "Home",
@@ -173,4 +172,4 @@ def test_show_reminder_invokes_manager(monkeypatch):
 
     assert payload["action"] == "reminders.show"
     assert payload["data"]["shown"] is True
-    assert seen["args"][2:] == ["show", "Pay rent", "Home"]
+    assert seen["args"][1:] == ["show", "Pay rent", "Home"]
